@@ -24,6 +24,7 @@ import {
   ndJsonStream,
   PROTOCOL_VERSION,
   RequestError,
+  type AgentApp,
   type AgentContext,
   type AuthenticateRequest,
   type CancelNotification,
@@ -392,6 +393,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     .onRequest(methods.agent.session.setConfigOption, ({ params, signal }) => implementation.setSessionConfigOption(params, signal))
     .onRequest(methods.agent.session.prompt, ({ params, signal }) => implementation.prompt(params, signal))
     .onNotification(methods.agent.session.cancel, ({ params }) => implementation.cancel(params))
+  ctx.emit('acp/extend', { app, owned: (id: string) => sessions.get(brandString<SessionId>(id)) })
   const connection = app.connect(stream)
   const conn: AgentContext = connection.client
 
@@ -536,5 +538,18 @@ async function sameDirectory(left: string | undefined, right: string): Promise<b
     return realLeft === realRight
   } catch (_unresolvablePath) {
     return resolve(left) === resolve(right)
+  }
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * The ACP bridge's app builder, offered to sibling plugins right before it connects, so they can
+     * register `_`-prefixed extension methods and notifications on the same connection (the names
+     * ACP reserves for extensions). Nothing happens unless a plugin listens.
+     * @param payload.app - the bridge's ACP app builder; handlers registered here are served.
+     * @param payload.owned - lookup of a session this bridge owns, by ACP session id.
+     */
+    'acp/extend'(payload: { app: AgentApp; owned: (sessionId: string) => AcpSession | undefined }): void
   }
 }
